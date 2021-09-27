@@ -1,21 +1,14 @@
-# standard library
-from collections import Counter
 import time
-
-# third-party libraries
 import wx
-import wx.adv
-import numpy as np
-from pubsub import pub
-import imageio
+
 from mandelrust import mandelbrot, mandelbrot_mt
 
 VERSION = "0.1.0"
 FANCY_APP_NAME = 'Mandelbrot'
-# custom libraries
 
 MAX_ITER = 100
 
+##########  Code for Python version of Mandelbrot Set computation
 def escape_time(c):
     z = 0
     n = 0
@@ -25,14 +18,17 @@ def escape_time(c):
     return n
 
 def mandelbrot_python(width, height, left, right, top, bottom):
-        pixels = []
-        for y in range(height):
-            for x in range(width):
-                c = complex(left + (x / width) * (right - left), bottom + (y / height) * (top - bottom))
-                m = escape_time(c)
-                color = 255 - int(m * 255 / MAX_ITER)
-                pixels.extend([color, color, color])
-        return bytes(pixels)
+    pixels = []
+    for y in range(height):
+        for x in range(width):
+            c = complex(left + (x / width) * (right - left), bottom + (y / height) * (top - bottom))
+            m = escape_time(c)
+            color = 255 - int(m * 255 / MAX_ITER)
+            pixels.extend([color, color, color])
+    return bytes(pixels)
+
+##########
+
 
 class Mandelbrot(wx.Panel):
     def __init__(self, parent):
@@ -42,7 +38,7 @@ class Mandelbrot(wx.Panel):
         self.right = 1
         self.top   = -1
         self.bottom = 1
-        self.img = None
+        self.bitmap = None
         self.dirty = True
         self.elapsed = None
         self.engine = 'Rust'
@@ -68,7 +64,8 @@ class Mandelbrot(wx.Panel):
             start = time.monotonic()
             pixels = fn(w, h, self.left, self.right, self.top, self.bottom)
             self.elapsed = time.monotonic() - start
-            self.img = np.frombuffer(pixels, dtype=np.uint8).reshape(h, w, 3)
+            self.bitmap = wx.Bitmap.FromBuffer(w, h, pixels)
+
             self.dirty = False
             self.Update()
             self.Refresh(False)
@@ -81,7 +78,6 @@ class Mandelbrot(wx.Panel):
         self.Refresh(False)
         w, h = self.GetClientSize()
         self.parent.statusbar.SetStatusText(f'{w} x {h}', 0)
-
         
     def onClick(self, event):
         x, y = event.GetX(), event.GetY()
@@ -103,7 +99,6 @@ class Mandelbrot(wx.Panel):
         self.Update()
         self.Refresh(False)
         self.parent.statusbar.SetStatusText(f"Computing...", 2)
-
     
     def reposition(self, fx, fy):
         span_x = self.right - self.left
@@ -143,31 +138,27 @@ class Mandelbrot(wx.Panel):
     def onPaint(self, event):
         dc = wx.BufferedPaintDC(self)
         w, h = self.GetClientSize()
-        if self.img is not None:
-            ih, iw, _ = self.img.shape
-            img = wx.Bitmap.FromBuffer(iw, ih, self.img)
-            if iw != w or ih != h:
-                img = img.ConvertToImage()
-                img = img.Scale(w, h, wx.IMAGE_QUALITY_NORMAL)
-                img = wx.Bitmap(img)
-            dc.DrawBitmap(img, 0, 0)
-        
- 
+        if self.bitmap is not None:
+            bmp = self.bitmap
+            if self.dirty:
+                img = bmp.ConvertToImage()
+                img = img.Scale(w, h, wx.IMAGE_QUALITY_HIGH)
+                bmp = wx.Bitmap(img)
+            dc.DrawBitmap(bmp, 0, 0)
+
+
 class MainFrame(wx.Frame):
     def __init__(self, **kwargs):
         wx.Frame.__init__(self, None, **kwargs)
         
         self.statusbar = self.CreateStatusBar(4)
-        self.statusbar.SetStatusWidths([75, 75, 75, -1])
+        self.statusbar.SetStatusWidths([-1, -1, -1, -3])
         self.statusbar.SetStatusText("Hit 'R' for Rust, 'M' for Rust MT, 'P' for Python rendering", 3)
 
         self.main = Mandelbrot(self)
         sizer = wx.BoxSizer(wx.HORIZONTAL)
         sizer.Add(self.main, 1, flag=wx.EXPAND|wx.ALL, border=0)
         self.SetSizer(sizer)        
-                
-    def onExit(self, event):
-        self.Close()
 
 
 def main():
